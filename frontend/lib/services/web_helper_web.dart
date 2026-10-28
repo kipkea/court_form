@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:js_interop';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
 
@@ -28,6 +30,32 @@ void openExternalUrl(String url) {
   } catch (_) {}
 }
 
+bool checkPlatformLiteFlag() {
+  try {
+    final mode = Uri.base.queryParameters['mode']?.toLowerCase();
+    final lite = Uri.base.queryParameters['lite']?.toLowerCase();
+    return mode == 'lite' || mode == 'standalone' || lite == '1' || lite == 'true';
+  } catch (_) {
+    return false;
+  }
+}
+
+Future<Map<String, dynamic>?> loadLocalLiteData() async {
+  try {
+    final raw = web.window.localStorage.getItem('court_form_lite_data');
+    if (raw != null && raw.isNotEmpty) {
+      return Map<String, dynamic>.from(jsonDecode(raw));
+    }
+  } catch (_) {}
+  return null;
+}
+
+Future<void> saveLocalLiteData(Map<String, dynamic> data) async {
+  try {
+    web.window.localStorage.setItem('court_form_lite_data', jsonEncode(data));
+  } catch (_) {}
+}
+
 Future<void> saveFileBytes(
   Uint8List bytes,
   String filename, {
@@ -54,4 +82,13 @@ Future<void> printPdfBytes(Uint8List pdfBytes) async {
   } catch (e) {
     debugPrint('printPdfBytes error: $e');
   }
+}
+
+Future<Uint8List> buildMultiPagePdfFromImages(
+  List<ui.Image> pages,
+  double widthMm,
+  double heightMm,
+) async {
+  final firstPng = await pages.first.toByteData(format: ui.ImageByteFormat.png);
+  return firstPng!.buffer.asUint8List();
 }

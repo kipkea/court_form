@@ -1,12 +1,15 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import '../services/api_service.dart';
+import '../services/lite_defaults.dart';
 import '../services/thai_helper.dart';
 import '../services/web_helper.dart';
 
 class FormProvider extends ChangeNotifier {
   final ApiService _api = ApiService();
 
+  bool isLiteMode = false;
   bool isLoading = true;
   bool isRendering = false;
   String? errorMessage;
@@ -42,13 +45,10 @@ class FormProvider extends ChangeNotifier {
   double offsetYMm = 0.0;
   String activeDataSourceUsed = '';
 
-  // Admin Designer Mode
-  bool isAdminEditMode = false;
-
   // Batch / Mail Merge State
   List<String> batchColumns = [];
   List<Map<String, dynamic>> batchRows = [];
-  Map<String, String> batchFieldMapping = {}; // fieldKey -> columnKey
+  Map<String, String> batchFieldMapping = {};
   int batchPreviewIndex = 0;
   String batchSourceLabel = '';
 
@@ -56,8 +56,8 @@ class FormProvider extends ChangeNotifier {
   List<Map<String, dynamic>> printLogs = [];
   Map<String, dynamic> printLogSummary = {};
 
-  bool get isAuthenticated => user != null && _api.token != null;
-  bool get isFormAdmin => user?['is_form_admin'] == true;
+  bool get isAuthenticated => isLiteMode || (user != null && _api.token != null);
+  bool get isFormAdmin => isLiteMode || (user?['is_form_admin'] == true);
   String get displayName => (user?['display_name'] ?? user?['username'] ?? 'ผู้ใช้งาน').toString();
   String get department => (user?['department'] ?? 'ศาลแขวงเชียงดาว').toString();
   String get position => (user?['position'] ?? 'เจ้าหน้าที่ศาล').toString();
@@ -71,10 +71,33 @@ class FormProvider extends ChangeNotifier {
     return null;
   }
 
-  Future<void> initialize() async {
+  static bool _detectLiteParameter(List<String> cliArgs) {
+    const envLite = bool.fromEnvironment('LITE_MODE', defaultValue: false);
+    if (envLite) return true;
+    for (final arg in cliArgs) {
+      final clean = arg.trim().toLowerCase();
+      if (clean == '--lite' ||
+          clean == '-lite' ||
+          clean == 'lite' ||
+          clean == '-l' ||
+          clean == '--standalone' ||
+          clean == '-standalone' ||
+          clean == 'standalone') {
+        return true;
+      }
+    }
+    return checkPlatformLiteFlag();
+  }
+
+  Future<void> initialize({List<String> cliArgs = const []}) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
+
+    if (_detectLiteParameter(cliArgs)) {
+      await switchToLiteMode();
+      return;
+    }
 
     try {
       String? ssoTicket = Uri.base.queryParameters['sso_ticket'];
@@ -111,11 +134,62 @@ class FormProvider extends ChangeNotifier {
         await loadAllInitialData();
       }
     } catch (e) {
-      errorMessage = 'ไม่สามารถเชื่อมต่อระบบได้: $e';
+      errorMessage = 'ไม่สามารถเชื่อมต่อระบบแม่ข่ายได้ (สามารถกดปุ่มเข้าใช้งานโหมด Lite ด้านล่างได้ทันที)';
     } finally {
       isLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<void> switchToLiteMode() async {
+    isLiteMode = true;
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+
+    user = {
+      'id': 0,
+      'username': 'lite_user',
+      'display_name': 'โหมดใช้งานอิสระ (Standalone Lite)',
+      'department': 'ไม่ต้องเชื่อมต่อระบบกลาง',
+      'position': 'ผู้ใช้งานเครื่องนี้',
+      'court_name': 'ศาลแขวงเชียงดาว',
+      'is_form_admin': true,
+    };
+
+    paperSizes = LiteDefaults.getPaperSizes();
+    printerProfiles = LiteDefaults.getPrinterProfiles();
+    templates = LiteDefaults.getDefaultTemplates();
+    dataSources = [];
+
+    final savedLocal = await loadLocalLiteData();
+    if (savedLocal != null) {
+      if (savedLocal['templates'] is List && (savedLocal['templates'] as List).isNotEmpty) {
+        templates = List<Map<String, dynamic>>.from(
+          (savedLocal['templates'] as List).map((e) => Map<String, dynamic>.from(e as Map)),
+        );
+      }
+      if (savedLocal['printerProfiles'] is List && (savedLocal['printerProfiles'] as List).isNotEmpty) {
+        printerProfiles = List<Map<String, dynamic>>.from(
+          (savedLocal['printerProfiles'] as List).map((e) => Map<String, dynamic>.from(e as Map)),
+        );
+      }
+    }
+
+    if (templates.isNotEmpty) {
+      selectTemplate(templates.first);
+    }
+
+    isLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> _persistLiteState() async {
+    if (!isLiteMode) return;
+    await saveLocalLiteData({
+      'templates': templates,
+      'printerProfiles': printerProfiles,
+    });
   }
 
   Future<bool> loginWithCredentials(String username, String password) async {
@@ -136,7 +210,7 @@ class FormProvider extends ChangeNotifier {
         return true;
       }
     } catch (e) {
-      errorMessage = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+      errorMessage = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง หรือไม่ได้เปิดเซิร์ฟเวอร์พอร์ต 8007';
     }
     isLoading = false;
     notifyListeners();
@@ -166,7 +240,7 @@ class FormProvider extends ChangeNotifier {
     if (templates.isNotEmpty && selectedTemplate == null) {
       selectTemplate(templates.first);
     }
-    if (isFormAdmin) {
+    if (isFormAdmin && !isLiteMode) {
       await loadPrintLogs();
     }
     notifyListeners();
@@ -227,7 +301,7 @@ class FormProvider extends ChangeNotifier {
     final vals = customValues ?? fieldValues;
     final key = (field['key'] ?? '').toString();
     final ftype = (field['field_type'] ?? 'text').toString();
-    String rawVal = vals[key] ?? (field['default_value'] ?? '').toString();
+    final rawVal = vals[key] ?? (field['default_value'] ?? '').toString();
 
     if (ftype == 'bahttext') {
       final srcKey = (field['source_field'] ?? '').toString();
@@ -260,7 +334,6 @@ class FormProvider extends ChangeNotifier {
     return rawVal;
   }
 
-  // Live Dragging & Nudging on Canvas (Works for both Users & Admins!)
   void moveFieldPosition(String fieldId, double newXMm, double newYMm) {
     final idx = activeFields.indexWhere((f) => f['id'] == fieldId);
     if (idx < 0) return;
@@ -294,7 +367,6 @@ class FormProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Admin Designer Actions
   void addNewField({String fieldType = 'text', String? customLabel}) {
     final id = 'fld_${DateTime.now().millisecondsSinceEpoch}';
     final key = 'field_${activeFields.length + 1}';
@@ -358,7 +430,6 @@ class FormProvider extends ChangeNotifier {
     bool createNew = false,
   }) async {
     if (!isFormAdmin) return false;
-    // อัปเดต default_value จากค่าที่กรอกปัจจุบัน
     for (final f in activeFields) {
       final k = (f['key'] ?? '').toString();
       if (k.isNotEmpty && fieldValues.containsKey(k)) {
@@ -380,9 +451,33 @@ class FormProvider extends ChangeNotifier {
       'default_offset_x_mm': offsetXMm,
       'default_offset_y_mm': offsetYMm,
       'allowed_data_source': allowedDataSource,
-      'fields_schema': activeFields,
+      'fields_schema': jsonDecode(jsonEncode(activeFields)),
       'is_active': true,
     };
+
+    if (isLiteMode) {
+      if (createNew || selectedTemplate == null) {
+        final newId = DateTime.now().millisecondsSinceEpoch;
+        payload['id'] = newId;
+        payload['code'] = 'lite_$newId';
+        templates.add(payload);
+        selectTemplate(payload);
+      } else {
+        final id = selectedTemplate!['id'];
+        payload['id'] = id;
+        payload['code'] = selectedTemplate!['code'] ?? 'lite_$id';
+        final idx = templates.indexWhere((t) => t['id'] == id);
+        if (idx >= 0) {
+          templates[idx] = payload;
+        } else {
+          templates.add(payload);
+        }
+        selectTemplate(payload);
+      }
+      await _persistLiteState();
+      notifyListeners();
+      return true;
+    }
 
     if (createNew || selectedTemplate == null || selectedTemplate!['id'] == null) {
       payload['code'] = 'tpl_${DateTime.now().millisecondsSinceEpoch}';
@@ -402,6 +497,19 @@ class FormProvider extends ChangeNotifier {
 
   Future<void> duplicateTemplateById(int id) async {
     if (!isFormAdmin) return;
+    if (isLiteMode) {
+      final orig = templates.firstWhere((t) => t['id'] == id);
+      final copy = Map<String, dynamic>.from(jsonDecode(jsonEncode(orig)));
+      final newId = DateTime.now().millisecondsSinceEpoch;
+      copy['id'] = newId;
+      copy['code'] = '${orig['code']}_copy';
+      copy['name'] = '${orig['name']} (สำเนา)';
+      templates.add(copy);
+      await _persistLiteState();
+      selectTemplate(copy);
+      notifyListeners();
+      return;
+    }
     final copy = await _api.duplicateTemplate(id);
     templates = await _api.fetchTemplates();
     selectTemplate(copy);
@@ -410,6 +518,15 @@ class FormProvider extends ChangeNotifier {
 
   Future<void> deleteTemplateById(int id) async {
     if (!isFormAdmin) return;
+    if (isLiteMode) {
+      templates.removeWhere((t) => t['id'] == id);
+      await _persistLiteState();
+      if (templates.isNotEmpty) {
+        selectTemplate(templates.first);
+      }
+      notifyListeners();
+      return;
+    }
     await _api.deleteTemplate(id);
     templates = await _api.fetchTemplates();
     if (templates.isNotEmpty) {
@@ -421,7 +538,6 @@ class FormProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Data Source Filling & Batch Mapping
   Future<Map<String, dynamic>> queryDataSourceRecords(String sourceCode, {String search = ''}) async {
     return await _api.fetchDataSourceRecords(sourceCode, search: search);
   }
@@ -440,14 +556,18 @@ class FormProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void loadDataSourceRecordsIntoBatch(String sourceCode, String sourceLabel, List<Map<String, dynamic>> records, List<Map<String, dynamic>> fieldsMeta) {
+  void loadDataSourceRecordsIntoBatch(
+    String sourceCode,
+    String sourceLabel,
+    List<Map<String, dynamic>> records,
+    List<Map<String, dynamic>> fieldsMeta,
+  ) {
     batchSourceLabel = '$sourceLabel (${records.length} รายการ)';
     batchColumns = fieldsMeta.map((e) => e['key'].toString()).toList();
     batchRows = records;
     batchPreviewIndex = 0;
     activeDataSourceUsed = sourceCode;
 
-    // Auto-map matching data_binding_key or field key
     batchFieldMapping = {};
     for (final f in activeFields) {
       final fKey = (f['key'] ?? '').toString();
@@ -462,12 +582,21 @@ class FormProvider extends ChangeNotifier {
   }
 
   Future<void> uploadAndParseBatchFile(Uint8List bytes, String filename) async {
-    final res = await _api.parseBatchFile(bytes, filename);
-    batchSourceLabel = 'ไฟล์ $filename (${res['row_count']} แถว)';
-    batchColumns = List<String>.from(res['columns'] ?? []);
-    batchRows = List<Map<String, dynamic>>.from(res['rows'] ?? []);
-    batchPreviewIndex = 0;
-    activeDataSourceUsed = 'file:$filename';
+    if (isLiteMode) {
+      final parsed = LiteDefaults.parseCsvLocally(bytes);
+      batchColumns = List<String>.from(parsed['columns'] ?? []);
+      batchRows = List<Map<String, dynamic>>.from(parsed['rows'] ?? []);
+      batchSourceLabel = 'ไฟล์ $filename (${batchRows.length} แถว)';
+      batchPreviewIndex = 0;
+      activeDataSourceUsed = 'local_file:$filename';
+    } else {
+      final res = await _api.parseBatchFile(bytes, filename);
+      batchSourceLabel = 'ไฟล์ $filename (${res['row_count']} แถว)';
+      batchColumns = List<String>.from(res['columns'] ?? []);
+      batchRows = List<Map<String, dynamic>>.from(res['rows'] ?? []);
+      batchPreviewIndex = 0;
+      activeDataSourceUsed = 'file:$filename';
+    }
 
     batchFieldMapping = {};
     for (final f in activeFields) {
@@ -495,15 +624,62 @@ class FormProvider extends ChangeNotifier {
     return out;
   }
 
-  // Render, Print & Save Actions (Records Audit Log automatically!)
   Future<void> executeRenderAction(String actionType, {List<Map<String, String>>? customRecords}) async {
     isRendering = true;
     notifyListeners();
     try {
+      final code = (selectedTemplate?['code'] ?? 'form').toString();
+      final ts = DateTime.now().millisecondsSinceEpoch;
+
+      // โหมด Lite Standalone: เรนเดอร์ PDF / PNG ภายในเครื่อง 100% ไม่ต้องใช้ Server
+      if (isLiteMode) {
+        final records = (customRecords != null && customRecords.isNotEmpty)
+            ? customRecords
+            : <Map<String, String>>[fieldValues];
+
+        if (actionType == 'EXPORT_PNG') {
+          final pngBytes = await LiteDefaults.renderLocalPngBytes(
+            widthMm: paperWidthMm,
+            heightMm: paperHeightMm,
+            fieldsSchema: activeFields,
+            values: records.first,
+            backgroundImageBase64: backgroundImage,
+            printBackground: printBackgroundToPaper,
+            offsetXMm: offsetXMm,
+            offsetYMm: offsetYMm,
+          );
+          await saveFileBytes(pngBytes, '${code}_$ts.png', mimeType: 'image/png');
+        } else {
+          final uiPages = <ui.Image>[];
+          for (final rec in records) {
+            final pageImg = await LiteDefaults.renderPageAsUiImage(
+              widthMm: paperWidthMm,
+              heightMm: paperHeightMm,
+              fieldsSchema: activeFields,
+              values: rec,
+              backgroundImageBase64: backgroundImage,
+              printBackground: printBackgroundToPaper,
+              offsetXMm: offsetXMm,
+              offsetYMm: offsetYMm,
+              dpi: 240.0,
+            );
+            uiPages.add(pageImg);
+          }
+          final pdfBytes = await buildMultiPagePdfFromImages(uiPages, paperWidthMm, paperHeightMm);
+          if (actionType == 'PRINT') {
+            await printPdfBytes(pdfBytes);
+          } else {
+            await saveFileBytes(pdfBytes, '${code}_$ts.pdf', mimeType: 'application/pdf');
+          }
+        }
+        return;
+      }
+
+      // โหมด Full Enterprise: เรนเดอร์ผ่าน Server + บันทึก FormPrintLog
       final payload = <String, dynamic>{
         'action_type': actionType,
         'template_id': selectedTemplate?['id'],
-        'template_code': selectedTemplate?['code'] ?? 'custom',
+        'template_code': code,
         'template_name': selectedTemplate?['name'] ?? 'แบบพิมพ์กำหนดเอง',
         'paper_size_label': '$paperPresetCode (${paperWidthMm.toStringAsFixed(0)}×${paperHeightMm.toStringAsFixed(0)} มม.)',
         'width_mm': paperWidthMm,
@@ -539,26 +715,15 @@ class FormProvider extends ChangeNotifier {
     }
   }
 
-  // Printer Profiles
-  Future<void> savePrinterOffsetProfile(String name, bool isShared) async {
-    await _api.createPrinterProfile({
-      'name': name,
-      'offset_x_mm': offsetXMm,
-      'offset_y_mm': offsetYMm,
-      'is_shared': isShared,
-    });
-    printerProfiles = await _api.fetchPrinterProfiles();
-    notifyListeners();
-  }
-
-  // Admin DataSource & Print Log Management
   Future<void> updateDataSourceSetting(int id, Map<String, dynamic> patchData) async {
+    if (isLiteMode) return;
     await _api.updateDataSource(id, patchData);
     dataSources = await _api.fetchDataSources();
     notifyListeners();
   }
 
   Future<void> loadPrintLogs({String search = '', String actionType = 'ALL', int? templateId}) async {
+    if (isLiteMode) return;
     final results = await Future.wait([
       _api.fetchPrintLogs(search: search, actionType: actionType, templateId: templateId),
       _api.fetchPrintLogSummary(),

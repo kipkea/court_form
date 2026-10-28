@@ -1,0 +1,10 @@
+^D:\KEAAPP\COURT_FORM\FRONTEND\BUILD\WINDOWS\X64\CMAKEFILES\C8501FEEA11D6BAC5DA84143B59EF1AA\INSTALL_FORCE.RULE
+setlocal
+cd .
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

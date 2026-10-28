@@ -8,10 +8,10 @@ import 'screens/batch_merge_tab.dart';
 import 'screens/workspace_tab.dart';
 import 'widgets/court_header.dart';
 
-void main() {
+void main(List<String> args) {
   runApp(
     ChangeNotifierProvider(
-      create: (_) => FormProvider()..initialize(),
+      create: (_) => FormProvider()..initialize(cliArgs: args),
       child: const CourtFormApp(),
     ),
   );
@@ -74,12 +74,13 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
     }
 
     final isAdmin = prov.isFormAdmin;
+    final showServerAdminTabs = isAdmin && !prov.isLiteMode;
 
     final tabs = <Widget>[
       WorkspaceTab(onSwitchToBatchTab: () => setState(() => _activeTabIndex = 1)),
       const BatchMergeTab(),
-      if (isAdmin) AdminManageTab(onOpenDesigner: () => setState(() => _activeTabIndex = 0)),
-      if (isAdmin) const AdminLogsTab(),
+      if (showServerAdminTabs) AdminManageTab(onOpenDesigner: () => setState(() => _activeTabIndex = 0)),
+      if (showServerAdminTabs) const AdminLogsTab(),
     ];
 
     final safeIdx = _activeTabIndex.clamp(0, tabs.length - 1);
@@ -105,9 +106,11 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   index: 1,
                   currentIndex: safeIdx,
                   icon: Icons.library_books_rounded,
-                  label: '2. พิมพ์ต่อเนื่องหลายแผ่น (Batch / Excel / Data Source)',
+                  label: prov.isLiteMode
+                      ? '2. พิมพ์ต่อเนื่องหลายแผ่น (CSV Batch)'
+                      : '2. พิมพ์ต่อเนื่องหลายแผ่น (Batch / Excel / Data Source)',
                 ),
-                if (isAdmin) ...[
+                if (showServerAdminTabs) ...[
                   const SizedBox(width: 8),
                   _navTabButton(
                     index: 2,
@@ -267,6 +270,24 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   label: Text(
                     'ไปที่หน้า Court Central Portal (พอร์ต 8888)',
                     style: GoogleFonts.sarabun(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const Divider(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: prov.switchToLiteMode,
+                    icon: const Icon(Icons.offline_bolt_rounded, size: 18),
+                    label: Text(
+                      'เข้าใช้งานโหมด Lite (Standalone พิมพ์อิสระไม่ต้องล็อกอิน)',
+                      style: GoogleFonts.sarabun(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.deepOrange.shade800,
+                      side: BorderSide(color: Colors.deepOrange.shade300),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
                   ),
                 ),
               ],

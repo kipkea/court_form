@@ -83,13 +83,17 @@ class CourtHeader extends StatelessWidget implements PreferredSizeWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: prov.isFormAdmin
-                              ? Colors.amber.shade700
-                              : Colors.lightBlue.shade600,
+                          color: prov.isLiteMode
+                              ? Colors.deepOrange.shade600
+                              : (prov.isFormAdmin ? Colors.amber.shade700 : Colors.lightBlue.shade600),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          prov.isFormAdmin ? 'สิทธิ์: ADMIN (ผู้ดูแลแม่แบบ)' : 'สิทธิ์: ผู้ใช้งานทั่วไป',
+                          prov.isLiteMode
+                              ? 'โหมด: LITE / STANDALONE (พิมพ์อิสระ ไม่ต้องล็อกอิน)'
+                              : (prov.isFormAdmin
+                                  ? 'สิทธิ์: ADMIN (ผู้ดูแลแม่แบบ)'
+                                  : 'สิทธิ์: ผู้ใช้งานทั่วไป'),
                           style: GoogleFonts.sarabun(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -102,7 +106,7 @@ class CourtHeader extends StatelessWidget implements PreferredSizeWidget {
                 ],
               ),
             ),
-            if (prov.isAuthenticated && !isCompact)
+            if (prov.isAuthenticated && !prov.isLiteMode && !isCompact)
               Container(
                 margin: const EdgeInsets.only(right: 12),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -144,21 +148,46 @@ class CourtHeader extends StatelessWidget implements PreferredSizeWidget {
                   ],
                 ),
               ),
-            ElevatedButton.icon(
-              onPressed: prov.logoutToPortal,
-              icon: const Icon(Icons.apps_rounded, size: 17),
-              label: Text(
-                isCompact ? 'Portal' : 'กลับสู่ระบบหลัก (Portal)',
-                style: GoogleFonts.sarabun(fontWeight: FontWeight.bold, fontSize: 12.5),
+            if (!prov.isLiteMode)
+              ElevatedButton.icon(
+                onPressed: prov.logoutToPortal,
+                icon: const Icon(Icons.apps_rounded, size: 17),
+                label: Text(
+                  isCompact ? 'Portal' : 'กลับสู่ระบบหลัก (Portal)',
+                  style: GoogleFonts.sarabun(fontWeight: FontWeight.bold, fontSize: 12.5),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF004D40),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white30),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.offline_bolt_rounded, color: Colors.amberAccent, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Standalone Mode (--lite)',
+                      style: GoogleFonts.sarabun(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF004D40),
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              ),
-            ),
           ],
         ),
       ),

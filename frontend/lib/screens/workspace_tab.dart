@@ -85,23 +85,25 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
                       if (v != null) setModalState(() => cat = v);
                     },
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: allowedDs,
-                    decoration: InputDecoration(
-                      labelText: 'แหล่งข้อมูลเริ่มต้นที่ผูกกับแม่แบบนี้',
-                      labelStyle: GoogleFonts.sarabun(),
-                      border: const OutlineInputBorder(),
+                  if (!prov.isLiteMode) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: allowedDs,
+                      decoration: InputDecoration(
+                        labelText: 'แหล่งข้อมูลเริ่มต้นที่ผูกกับแม่แบบนี้',
+                        labelStyle: GoogleFonts.sarabun(),
+                        border: const OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'portal_users', child: Text('ข้อมูลบุคลากรและผู้ใช้งานในระบบ')),
+                        DropdownMenuItem(value: 'courts', child: Text('ข้อมูลศาลและที่อยู่หน่วยงานมาตรฐาน')),
+                        DropdownMenuItem(value: '', child: Text('ไม่ผูกแหล่งข้อมูลเริ่มต้น')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setModalState(() => allowedDs = v);
+                      },
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'portal_users', child: Text('ข้อมูลบุคลากรและผู้ใช้งานในระบบ')),
-                      DropdownMenuItem(value: 'courts', child: Text('ข้อมูลศาลและที่อยู่หน่วยงานมาตรฐาน')),
-                      DropdownMenuItem(value: '', child: Text('ไม่ผูกแหล่งข้อมูลเริ่มต้น')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setModalState(() => allowedDs = v);
-                    },
-                  ),
+                  ],
                   const SizedBox(height: 12),
                   TextField(
                     controller: descCtrl,
@@ -234,34 +236,36 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
                         }
                       },
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              showDialog(
-                                context: context,
-                                builder: (_) => DataSourcePickerDialog(
-                                  initialSourceCode: prov.selectedTemplate?['allowed_data_source']?.toString(),
-                                  onSwitchToBatchTab: widget.onSwitchToBatchTab,
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.storage_rounded, size: 17),
-                            label: Text(
-                              'ดึงข้อมูลจากระบบ (บุคลากร/ศาล)',
-                              style: GoogleFonts.sarabun(fontWeight: FontWeight.bold, fontSize: 12.5),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF00695C),
-                              side: const BorderSide(color: Color(0xFF00695C)),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
+                    if (!prov.isLiteMode) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => DataSourcePickerDialog(
+                                    initialSourceCode: prov.selectedTemplate?['allowed_data_source']?.toString(),
+                                    onSwitchToBatchTab: widget.onSwitchToBatchTab,
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.storage_rounded, size: 17),
+                              label: Text(
+                                'ดึงข้อมูลจากระบบ (บุคลากร/ศาล)',
+                                style: GoogleFonts.sarabun(fontWeight: FontWeight.bold, fontSize: 12.5),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF00695C),
+                                side: const BorderSide(color: Color(0xFF00695C)),
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

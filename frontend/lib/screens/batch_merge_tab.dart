@@ -81,7 +81,9 @@ class BatchMergeTab extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'นำเข้าข้อมูลจากไฟล์ Excel (.xlsx) / CSV หรือเลือกหลายรายการจากฐานข้อมูลศาล/บุคลากร เพื่อสั่งพิมพ์ซองจดหมาย เช็ค หรือแบบฟอร์มต่อเนื่องหลายแผ่นในครั้งเดียว',
+                prov.isLiteMode
+                    ? 'นำเข้าข้อมูลจากไฟล์ CSV เพื่อสั่งพิมพ์ซองจดหมาย เช็ค หรือแบบฟอร์มต่อเนื่องหลายแผ่นในครั้งเดียว (โหมด Standalone อิสระ)'
+                    : 'นำเข้าข้อมูลจากไฟล์ Excel (.xlsx) / CSV หรือเลือกหลายรายการจากฐานข้อมูลศาล/บุคลากร เพื่อสั่งพิมพ์ซองจดหมาย เช็ค หรือแบบฟอร์มต่อเนื่องหลายแผ่นในครั้งเดียว',
                 style: GoogleFonts.sarabun(fontSize: 12, color: Colors.grey.shade700),
               ),
               const SizedBox(height: 14),
@@ -92,7 +94,7 @@ class BatchMergeTab extends StatelessWidget {
                       onPressed: () => _pickCsvOrExcel(context, prov),
                       icon: const Icon(Icons.upload_file_rounded, size: 18),
                       label: Text(
-                        'อัปโหลด Excel / CSV',
+                        prov.isLiteMode ? 'อัปโหลดไฟล์ CSV' : 'อัปโหลด Excel / CSV',
                         style: GoogleFonts.sarabun(fontWeight: FontWeight.bold, fontSize: 12.5),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -102,25 +104,27 @@ class BatchMergeTab extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (_) => const DataSourcePickerDialog(),
-                        );
-                      },
-                      icon: const Icon(Icons.storage_rounded, size: 18),
-                      label: Text(
-                        'เลือกจากข้อมูลในระบบ',
-                        style: GoogleFonts.sarabun(fontWeight: FontWeight.bold, fontSize: 12.5),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                  if (!prov.isLiteMode) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => const DataSourcePickerDialog(),
+                          );
+                        },
+                        icon: const Icon(Icons.storage_rounded, size: 18),
+                        label: Text(
+                          'เลือกจากข้อมูลในระบบ',
+                          style: GoogleFonts.sarabun(fontWeight: FontWeight.bold, fontSize: 12.5),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
               const Divider(height: 24),
