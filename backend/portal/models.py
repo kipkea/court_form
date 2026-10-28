@@ -74,9 +74,15 @@ class Court(models.Model):
 class PortalApp(models.Model):
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=150)
-    url = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True, default='')
+    icon = models.CharField(max_length=50, default='print')
+    color = models.CharField(max_length=20, default='#00897B')
+    url = models.CharField(max_length=255, blank=True, default='')
+    badge_key = models.CharField(max_length=50, blank=True, default='')
     system_type = models.CharField(max_length=50, blank=True, default='')
     is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         managed = False
@@ -92,6 +98,8 @@ class UserAppPermission(models.Model):
     can_view = models.BooleanField(default=True)
     can_access = models.BooleanField(default=True)
     app_role = models.CharField(max_length=50, default='user')
+    sub_roles = models.JSONField(default=list, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         managed = False

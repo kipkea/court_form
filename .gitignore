@@ -1,0 +1,59 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Database
+*.sqlite3
+*.sqlite3-journal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+!frontend/build/
+!frontend/build/web/
+!frontend/build/web/**
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+*env/
+
+
+# Django
+local_settings.py
+staticfiles/
+media/
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+ระบบเดิม/
