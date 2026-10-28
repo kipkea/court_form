@@ -1,0 +1,31 @@
+# .dockerignore for Court Form Studio
+.git
+.gitignore
+.vscode
+*.bat
+*.md
+
+# Frontend build artifacts except web
+frontend/.dart_tool
+frontend/.idea
+frontend/android
+frontend/ios
+frontend/linux
+frontend/macos
+frontend/windows
+frontend/build/app
+frontend/build/flutter_assets
+frontend/build/native_assets
+frontend/build/windows
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+backend/staticfiles/*
+!backend/staticfiles/.gitkeep

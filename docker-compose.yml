@@ -1,0 +1,58 @@
+services:
+  # ==============================================================================
+  # 1. Database: PostgreSQL 16 (cdmc_system)
+  # ==============================================================================
+  court_form_db:
+    image: postgres:16-alpine
+    container_name: court_form_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cdmc_system}
+      POSTGRES_USER: ${DB_USER:-cdmc}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Cdmc@12345}
+    ports:
+      - "5432:5432"
+    volumes:
+      - court_form_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cdmc} -d ${DB_NAME:-cdmc_system}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ==============================================================================
+  # 2. Application: Court Smart Form & Print Studio (Django + Flutter Web)
+  # ==============================================================================
+  court_form_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: court_form_studio
+    restart: unless-stopped
+    depends_on:
+      court_form_db:
+        condition: service_healthy
+    environment:
+      PORT: 8007
+      HOST: 0.0.0.0
+      DJANGO_DEBUG: "False"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-court-smart-form-studio-secret-key-2026-chiangdao}
+      DJANGO_ALLOWED_HOSTS: "*"
+      DB_ENGINE: django.db.backends.postgresql_psycopg2
+      DB_NAME: ${DB_NAME:-cdmc_system}
+      DB_USER: ${DB_USER:-cdmc}
+      DB_PASSWORD: ${DB_PASSWORD:-Cdmc@12345}
+      DB_HOST: court_form_db
+      DB_PORT: 5432
+      CORS_ALLOW_ALL_ORIGINS: "True"
+      PORTAL_SECRET_KEY: ${PORTAL_SECRET_KEY:-portal-sso-shared-secret-key-cdmc-2026}
+    ports:
+      - "8007:8007"
+    volumes:
+      - court_form_media:/app/backend/media
+
+volumes:
+  court_form_pgdata:
+    name: court_form_pgdata
+  court_form_media:
+    name: court_form_media
