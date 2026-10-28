@@ -1262,6 +1262,7 @@ file:///D:/keaapp/court_form/frontend/lib/screens/admin_manage_tab.dart
 file:///D:/keaapp/court_form/frontend/lib/screens/batch_merge_tab.dart
 file:///D:/keaapp/court_form/frontend/lib/screens/workspace_tab.dart
 file:///D:/keaapp/court_form/frontend/lib/services/api_service.dart
+file:///D:/keaapp/court_form/frontend/lib/services/lite_defaults.dart
 file:///D:/keaapp/court_form/frontend/lib/services/thai_helper.dart
 file:///D:/keaapp/court_form/frontend/lib/services/web_helper.dart
 file:///D:/keaapp/court_form/frontend/lib/services/web_helper_web.dart
