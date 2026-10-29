@@ -393,28 +393,58 @@ class RenderAndPrintView(views.APIView):
     POST /api/form/render/
     เรนเดอร์แบบพิมพ์เป็นไฟล์ PDF หรือรูปภาพ PNG (300 DPI)
     พร้อมบันทึก Audit Log ว่าใครพิมพ์อะไรไปเมื่อไหร่
+
+    รองรับทั้ง:
+    1. ผู้ใช้งานทั่วไปที่ล็อกอินผ่านระบบเว็บ/แอป
+    2. ระบบอื่นในหน่วยงาน (Inter-System / Microservice) เรียกใช้ผ่าน X-Portal-Secret
+       โดยระบุ template_code และ values มาประกอบร่างเป็น PDF ส่งกลับไปใช้งานได้ทันที
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
     parser_classes = [JSONParser]
 
     def post(self, request):
-        data = request.data
-        action_type = str(data.get('action_type', 'PRINT')).upper()
+        data = request.data or {}
+
+        # 1. การตรวจสอบสิทธิ์: ล็อกอินปกติ หรือ เรียกข้ามระบบด้วย X-Portal-Secret
+        shared_secret = getattr(settings, 'PORTAL_SECRET_KEY', 'portal-sso-shared-secret-key-cdmc-2026')
+        header_secret = request.headers.get('X-Portal-Secret') or request.headers.get('X-Service-Key')
+        body_secret = data.get('portal_secret') or data.get('service_key')
+        is_service_call = (header_secret == shared_secret) or (body_secret == shared_secret)
+
+        user = request.user
+        if not (user and user.is_authenticated):
+            if is_service_call:
+                target_user = data.get('username') or ''
+                user = User.objects.filter(username=target_user).first() if target_user else None
+                if not user:
+                    user = User.objects.filter(is_superuser=True).first() or User.objects.first()
+            else:
+                return Response(
+                    {'error': 'กรุณาเข้าสู่ระบบ หรือแนบ Header X-Portal-Secret สำหรับการเรียกใช้งานข้ามระบบ'},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
+        action_type = str(data.get('action_type', 'EXPORT_PDF' if is_service_call else 'PRINT')).upper()
         if action_type not in ('PRINT', 'EXPORT_PDF', 'EXPORT_PNG', 'BATCH_PDF', 'PREVIEW_PNG'):
-            action_type = 'PRINT'
+            action_type = 'EXPORT_PDF' if is_service_call else 'PRINT'
 
         template_id = data.get('template_id')
-        tpl = FormTemplate.objects.filter(id=template_id).first() if template_id else None
+        template_code_in = data.get('template_code')
+        tpl = None
+        if template_id:
+            tpl = FormTemplate.objects.filter(id=template_id).first()
+        if not tpl and template_code_in:
+            tpl = FormTemplate.objects.filter(code=template_code_in).first()
 
         template_name = data.get('template_name') or (tpl.name if tpl else 'แบบพิมพ์กำหนดเอง')
-        template_code = tpl.code if tpl else (data.get('template_code') or 'custom')
+        template_code = tpl.code if tpl else (template_code_in or 'custom')
 
         width_mm = float(data.get('width_mm') or (tpl.width_mm if tpl else 210.0))
         height_mm = float(data.get('height_mm') or (tpl.height_mm if tpl else 297.0))
         paper_size_label = data.get('paper_size_label') or (f"{tpl.paper_preset} ({width_mm:g}×{height_mm:g} มม.)" if tpl else f"{width_mm:g}×{height_mm:g} มม.")
 
         fields_schema = data.get('fields_schema')
-        if not isinstance(fields_schema, list):
+        if not isinstance(fields_schema, list) or not fields_schema:
             fields_schema = tpl.fields_schema if tpl else []
 
         values = data.get('values') if isinstance(data.get('values'), dict) else {}
@@ -427,9 +457,10 @@ class RenderAndPrintView(views.APIView):
             background_image = tpl.background_image
         print_background = bool(data.get('print_background', tpl.print_background if tpl else False))
 
-        offset_x_mm = float(data.get('offset_x_mm', 0.0) or 0.0)
-        offset_y_mm = float(data.get('offset_y_mm', 0.0) or 0.0)
-        data_source_used = str(data.get('data_source_used') or '').strip()
+        offset_x_mm = float(data.get('offset_x_mm', 0.0) or (tpl.default_offset_x_mm if tpl else 0.0) or 0.0)
+        offset_y_mm = float(data.get('offset_y_mm', 0.0) or (tpl.default_offset_y_mm if tpl else 0.0) or 0.0)
+        calling_system = str(data.get('called_by_system') or request.headers.get('X-Calling-System') or '').strip()
+        data_source_used = str(data.get('data_source_used') or calling_system or '').strip()
 
         # สร้างไฟล์ PDF หรือ PNG
         if action_type in ('EXPORT_PNG', 'PREVIEW_PNG'):
@@ -478,16 +509,20 @@ class RenderAndPrintView(views.APIView):
                     if len(summary_parts) < 5:
                         summary_parts.append(f"{lbl}: {disp}")
 
+            sys_tag = f"[{calling_system}] " if calling_system else ("[API Service] " if is_service_call else "")
             if len(records) > 1:
-                summary_text = f"[พิมพ์ชุด {len(records)} แผ่น] " + " | ".join(summary_parts)
+                summary_text = f"{sys_tag}[พิมพ์ชุด {len(records)} แผ่น] " + " | ".join(summary_parts)
             else:
-                summary_text = " | ".join(summary_parts) if summary_parts else "พิมพ์แบบฟอร์มเปล่า"
+                summary_text = f"{sys_tag}" + (" | ".join(summary_parts) if summary_parts else "พิมพ์แบบฟอร์มเปล่า")
 
-            court_name = user.court.name if getattr(user, 'court', None) else 'ศาลแขวงเชียงดาว'
+            court_name = getattr(getattr(user, 'court', None), 'name', 'ศาลแขวงเชียงดาว')
+            u_name = getattr(user, 'username', 'system')
+            u_full = getattr(user, 'display_name', '') or (user.get_full_name() if hasattr(user, 'get_full_name') else '') or u_name
+
             log_obj = FormPrintLog.objects.create(
-                user=user,
-                username=user.username,
-                user_full_name=user.display_name,
+                user=user if getattr(user, 'is_authenticated', False) else None,
+                username=u_name,
+                user_full_name=u_full,
                 department=getattr(user, 'department', '') or '',
                 court_name=court_name,
                 template=tpl,
@@ -520,11 +555,16 @@ class RenderAndPrintView(views.APIView):
                 user_agent=(request.META.get('HTTP_USER_AGENT') or '')[:255],
             )
 
-        b64_content = base64.b64encode(out_bytes).decode('utf-8')
         timestamp_str = timezone.localtime().strftime('%Y%m%d_%H%M%S')
         safe_code = "".join(ch if ch.isalnum() or ch in ('_', '-') else '_' for ch in template_code)
         filename = f"{safe_code}_{timestamp_str}.{ext}"
 
+        if data.get('response_format') == 'binary' or request.query_params.get('format') == 'binary':
+            resp = HttpResponse(out_bytes, content_type=mime_type)
+            resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return resp
+
+        b64_content = base64.b64encode(out_bytes).decode('utf-8')
         return Response({
             'success': True,
             'action_type': action_type,
